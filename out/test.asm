@@ -1,0 +1,3 @@
+TEXT _main(SB), $0
+	NOP
+	MOVL $6908265, R0
