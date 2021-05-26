@@ -1,4 +1,5 @@
 //! Idomatic translation of a.out.h
+const std = @import("std");
 pub usingnamespace @import("std").c.builtins;
 pub const ushort = c_ushort;
 pub const uchar = u8;
@@ -21,7 +22,7 @@ pub const Exec = extern struct {
 // char  type;
 // char  name[n];   /* NUL-terminated */
 pub const Sym = struct {
-    value: [4]u8,
+    value: [8]u8,
     type: SymType,
     name: []const u8,
 };
@@ -71,7 +72,10 @@ pub const SymType = enum(u8) {
             .f => c,
             .z => c,
             .Z => c,
-            _ => error.NotSym,
+            _ => {
+                std.log.err("NotSym: {d} is not a symbol", .{cr});
+                return error.NotSym;
+            },
         };
     }
 };
