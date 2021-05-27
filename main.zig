@@ -1,12 +1,19 @@
 const std = @import("std");
 const aout = @import("a.out.zig");
 const sects_names = aout.sects_names;
+
+// TODO make not global, maybe diff datastruct if i know its in order.
+var hmap: std.AutoHashMap(u16, []const u8) = undefined;
+
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = &gpa.allocator;
-    const buf = try std.fs.cwd().readFileAlloc(allocator, "out/6.out", std.math.maxInt(usize));
+    const buf = try std.fs.cwd().readFileAlloc(allocator, "out/testc.out", std.math.maxInt(usize));
     defer allocator.free(buf);
+
+    hmap = std.AutoHashMap(u16, []const u8).init(allocator);
+    defer hmap.deinit();
 
     var stream = std.io.FixedBufferStream([]const u8){ .buffer = buf, .pos = 0 };
     const r = stream.reader();
@@ -54,11 +61,33 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
     while (true) {
         var s: aout.Sym = undefined;
         s.value = r.readBytesNoEof(8) catch break; // TODO this should be 4 for 32 bit systems and 8 for 64. Include this in the manpage patch too!
+        std.log.info("==\ns.value = {any}", .{std.fmt.fmtSliceHexLower(&s.value)});
         s.type = try aout.SymType.fromU8(r.readByte() catch break);
         std.log.info("s.type: {}", .{s.type});
-        s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
-        stream.pos += s.name.len + 1;
+
+        switch (s.type) {
+            .f => {
+                s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
+                stream.pos += s.name.len + 1;
+                try hmap.put(@byteSwap(u16, @bitCast(u16, s.value[6..].*)), s.name);
+            },
+            .z => {
+                const b = try r.readByte();
+                if (b != 0) return error.ZeroNoFollowz;
+                while (true) {
+                    if ((r.readIntBig(u16) catch break) == 0) break; // TODO actually handle it
+                }
+                s.name = "TODO: name for z";
+            },
+            .Z => std.log.err("Z unimplemented", .{}),
+            else => {
+                s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
+                stream.pos += s.name.len + 1;
+            },
+        }
+
         std.log.info("s.name: \"{s}\"({d})", .{ s.name, s.name.len });
+
         try l.append(s);
     }
     return l.toOwnedSlice();
