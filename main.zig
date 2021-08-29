@@ -2,8 +2,7 @@ const std = @import("std");
 const aout = @import("a.out.zig");
 const sects_names = aout.sects_names;
 
-// TODO make not global, maybe diff datastruct if i know its in order.
-var hmap: std.AutoHashMap(u16, []const u8) = undefined;
+var hmap: std.AutoHashMap(u64, []const u8) = undefined;
 
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
@@ -12,7 +11,7 @@ pub fn main() !void {
     const buf = try std.fs.cwd().readFileAlloc(allocator, std.mem.span(std.os.argv[1]), std.math.maxInt(usize));
     defer allocator.free(buf);
 
-    hmap = std.AutoHashMap(u16, []const u8).init(allocator);
+    hmap = std.AutoHashMap(u64, []const u8).init(allocator);
     defer hmap.deinit();
 
     var stream = std.io.FixedBufferStream([]const u8){ .buffer = buf, .pos = 0 };
@@ -38,6 +37,12 @@ pub fn main() !void {
     const syms = try readSyms(allocator, f.sects[2].data);
     defer allocator.free(syms);
     std.log.info("syms: {any}", .{syms});
+
+    if (std.os.argv.len == 3) {
+        const symname = std.mem.span(std.os.argv[2]);
+
+        try getLineFromSym(allocator, syms, symname, f.sects[4].data);
+    }
 }
 
 fn testHeaderSize(h: aout.Exec, b: []const u8) !void {
@@ -69,15 +74,20 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
             .f => {
                 s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
                 stream.pos += s.name.len + 1;
-                try hmap.put(@byteSwap(u16, @bitCast(u16, s.value[6..].*)), s.name);
+                try hmap.put(std.mem.readIntBig(u64, &s.value), s.name);
             },
             .z => {
                 const b = try r.readByte();
                 if (b != 0) return error.ZeroNoFollowz;
+                const st = stream.pos;
+                var e: usize = 0;
                 while (true) {
-                    if ((r.readIntBig(u16) catch break) == 0) break; // TODO actually handle it
+                    if ((r.readIntBig(u16) catch return error.ZeroNoEndz) == 0) {
+                        e = stream.pos - 2;
+                        break;
+                    }
                 }
-                s.name = "TODO: name for z";
+                s.name = stream.buffer[st..e];
             },
             .Z => {
                 const b = try r.readByte();
@@ -98,6 +108,67 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
         try l.append(s);
     }
     return l.toOwnedSlice();
+}
+
+/// return is filename:line
+fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8, linebuf: []const u8) !void {
+    var prevzidxo: ?usize = null;
+    const symidx = for (syms) |s, i| {
+        if (s.type == .z and syms[i - 1].type != .z and syms[i - 1].type != .Z) {
+            prevzidxo = i;
+        }
+        if (std.mem.eql(u8, sym, s.name)) {
+            break i;
+        }
+    } else return error.SymNotFound;
+    const prevzidx = prevzidxo orelse return error.NoFName;
+    const z = syms[prevzidx];
+    std.log.info("z: {}", .{z});
+    const name = try getNameFromz(a, z.name);
+    defer a.free(name);
+
+    const symval = std.mem.readIntBig(u64, &syms[symidx].value);
+    std.log.info("value for {s}: {x}", .{ sym, symval });
+    const pcquant = 1;
+    var lc: i64 = 0;
+    var curpc: usize = 0x200028 - pcquant;
+    const reader = std.io.fixedBufferStream(linebuf).reader();
+    while (true) {
+        if (curpc >= symval) break;
+        var u = reader.readByte() catch break;
+        if (u == 0)
+            lc += try reader.readIntBig(i32)
+        else if (u < 65)
+            lc += u
+        else if (u < 129)
+            lc -= (u - 64)
+        else
+            curpc += (u - 129) * pcquant;
+        curpc += pcquant;
+    }
+    std.log.info("file from {s}: `{s}:{d}`", .{
+        sym,
+        name,
+        lc,
+    });
+}
+
+// returns allocated slice
+fn getNameFromz(a: *std.mem.Allocator, b: []const u8) ![]const u8 {
+    std.log.info("z name: {s}", .{std.fmt.fmtSliceHexLower(b)});
+    var ar = std.ArrayList(u8).init(a);
+    const r = std.io.fixedBufferStream(b).reader();
+    var i: u16 = 0;
+    while (true) : (i += 1) {
+        const v = r.readIntBig(u16) catch {
+            _ = ar.pop();
+            return ar.toOwnedSlice();
+        };
+        try ar.appendSlice(hmap.get(v).?);
+        if (i != 0) {
+            try ar.append('/');
+        }
+    }
 }
 
 pub fn getHeader(r: anytype) !aout.Exec {
