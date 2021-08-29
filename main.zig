@@ -9,7 +9,7 @@ pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
     const allocator = &gpa.allocator;
-    const buf = try std.fs.cwd().readFileAlloc(allocator, "out/testc.out", std.math.maxInt(usize));
+    const buf = try std.fs.cwd().readFileAlloc(allocator, std.mem.span(std.os.argv[1]), std.math.maxInt(usize));
     defer allocator.free(buf);
 
     hmap = std.AutoHashMap(u16, []const u8).init(allocator);
@@ -79,7 +79,14 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
                 }
                 s.name = "TODO: name for z";
             },
-            .Z => std.log.err("Z unimplemented", .{}),
+            .Z => {
+                const b = try r.readByte();
+                if (b != 0) return error.ZeroNoFollowZ;
+                while (true) {
+                    if ((r.readIntBig(u16) catch break) == 0) break; // TODO actually handle it
+                }
+                s.name = "TODO: name for Z";
+            },
             else => {
                 s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
                 stream.pos += s.name.len + 1;
@@ -113,7 +120,9 @@ const Section = struct {
     /// the data of the section
     data: []const u8,
     pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
         try std.fmt.format(out_stream, "\nSection {{ .name = {s}, ", .{self.name});
-        try std.fmt.format(out_stream, ".data = {any} }}", .{std.fmt.fmtSliceHexLower(self.data)});
+        try std.fmt.format(out_stream, ".data = {s} }}", .{std.fmt.fmtSliceHexLower(self.data)});
     }
 };

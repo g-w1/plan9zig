@@ -37,6 +37,7 @@ f: File{ .hdr = Exec{ .magic = 35479, .text = 1, .data = 0, .bss = 0, .syms = 14
 Section { name: text, data: c3 }, 
 Section { name: data, data:  }, 
 Section { name: syms, data: 0000000000200029d46574657874000000000000000001e62f000000000000000003e6746573742e61736d000000000000400000c2656e64000000000000400000c26564617461000000000000000002e6746d70000000000000000001fa0000010002000300000000000000000004fa0000000000000000200028d45f6d61696e000000000000000008ed2e6672616d6500 }, 
+                                 _main 5f6d61696e                                         'm . f r a m e
 Section { name: spsz, data:  }, 
 Section { name: pcsz, data: 0481 } } }
 info: s.type: SymType.T

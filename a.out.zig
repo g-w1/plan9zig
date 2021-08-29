@@ -1,6 +1,6 @@
 //! Idomatic translation of a.out.h
 const std = @import("std");
-pub usingnamespace @import("std").c.builtins;
+pub usingnamespace @import("std").zig.c_builtins;
 pub const ushort = c_ushort;
 pub const uchar = u8;
 pub const ulong = c_ulong;
@@ -25,6 +25,11 @@ pub const Sym = struct {
     value: [8]u8,
     type: SymType,
     name: []const u8,
+    pub fn format(self: @This(), comptime fmt: []const u8, options: std.fmt.FormatOptions, out_stream: anytype) !void {
+        _ = fmt;
+        _ = options;
+        try std.fmt.format(out_stream, "Sym {{ .name = \"{s}\", .value = {any}, .type = {}, }}", .{ self.name, self.value, self.type });
+    }
 };
 // The type field is one of the following characters with the
 // high bit set:
@@ -41,6 +46,7 @@ pub const Sym = struct {
 // f    source file name components
 // z    source file name
 // Z    source file line offset
+// m for '.frame' not sure what its for
 pub const SymType = enum(u8) {
     T = 0x80 | 'T',
     t = 0x80 | 't',
@@ -55,6 +61,7 @@ pub const SymType = enum(u8) {
     f = 0x80 | 'f',
     z = 0x80 | 'z',
     Z = 0x80 | 'Z',
+    m = 0x80 | 'm',
     _,
     pub fn fromU8(cr: u8) !@This() {
         const c = @intToEnum(@This(), cr);
@@ -72,6 +79,7 @@ pub const SymType = enum(u8) {
             .f => c,
             .z => c,
             .Z => c,
+            .m => c,
             _ => {
                 std.log.err("NotSym: {d} is not a symbol", .{cr});
                 return error.NotSym;
@@ -80,7 +88,7 @@ pub const SymType = enum(u8) {
     }
 };
 
-pub const HDR_MAGIC = @import("std").meta.promoteIntLiteral(c_int, 0x00008000, .hexadecimal);
+pub const HDR_MAGIC = std.zig.c_translation.promoteIntLiteral(c_int, 0x00008000, .hexadecimal);
 pub inline fn _MAGIC(f: anytype, b: anytype) @TypeOf(f | ((((@as(c_int, 4) * b) + @as(c_int, 0)) * b) + @as(c_int, 7))) {
     return f | ((((@as(c_int, 4) * b) + @as(c_int, 0)) * b) + @as(c_int, 7));
 }
@@ -104,7 +112,7 @@ pub const T_MAGIC = _MAGIC(HDR_MAGIC, @as(c_int, 27));
 pub const R_MAGIC = _MAGIC(HDR_MAGIC, @as(c_int, 28));
 pub const MIN_MAGIC = @as(c_int, 8);
 pub const MAX_MAGIC = @as(c_int, 28);
-pub const DYN_MAGIC = @import("std").meta.promoteIntLiteral(c_int, 0x80000000, .hexadecimal);
+pub const DYN_MAGIC = promoteIntLiteral(c_int, 0x80000000, .hexadecimal);
 
 pub const sects_names = [5][]const u8{
     "text",
