@@ -6332,12 +6332,12 @@ arr = [
     0x01,
 ]
 
-import sys
+import os
 
-lc = 0
-pc = 0x200028
-i = 0
 pcquant = 1
+lc = 0
+pc = 0x200028 - pcquant
+i = 0
 while i < len(arr):
     oldlc = lc
     val = arr[i]
@@ -6346,12 +6346,11 @@ while i < len(arr):
         lc += int.from_bytes(arr[i : i + 4], byteorder="big", signed=True)
         i += 4
     elif val < 65:
-        lc += val * 4
+        lc += val
     elif val < 129:
         val -= 64
-        val *= 4
         lc -= val
-    elif val < 256:
+    else:
         val -= 129
         val *= pcquant
         pc += val
