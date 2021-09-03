@@ -145,6 +145,7 @@ fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8
         else
             curpc += (u - 129) * pcquant;
         curpc += pcquant;
+        std.log.debug("after: {d}", .{lc});
     }
     std.log.info("file from {s}: `{s}:{d}`", .{
         sym,
