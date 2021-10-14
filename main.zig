@@ -88,6 +88,7 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
                     }
                 }
                 s.name = stream.buffer[st..e];
+                std.log.info("Z NAME: {any}", .{s.name});
             },
             .Z => {
                 const b = try r.readByte();
@@ -156,7 +157,6 @@ fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8
 
 // returns allocated slice
 fn getNameFromz(a: *std.mem.Allocator, b: []const u8) ![]const u8 {
-    std.log.info("z name: {s}", .{std.fmt.fmtSliceHexLower(b)});
     var ar = std.ArrayList(u8).init(a);
     const r = std.io.fixedBufferStream(b).reader();
     var i: u16 = 0;
