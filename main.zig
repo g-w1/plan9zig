@@ -33,6 +33,18 @@ pub fn main() !void {
         f.sects[i] = .{ .name = name, .data = sl };
         off += size;
     }
+    // disassemble
+    if (std.os.getenv("DISASM") != null) {
+        // var cp = try std.ChildProcess.init(&.{ "ndisasm", "-" }, allocator);
+        // defer cp.deinit();
+        // cp.stdin_behavior = .Pipe;
+        // try cp.spawn();
+        // try cp.stdin.?.writeAll(f.sects[0].data);
+        // _ = try cp.wait();
+        try std.io.getStdOut().writeAll(f.sects[0].data);
+        return;
+    }
+
     std.log.info("file: {}", .{f});
     const syms = try readSyms(allocator, f.sects[2].data);
     defer allocator.free(syms);

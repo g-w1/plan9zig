@@ -88,7 +88,7 @@ pub const SymType = enum(u8) {
     }
 };
 
-pub const HDR_MAGIC = std.zig.c_translation.promoteIntLiteral(c_int, 0x00008000, .hexadecimal);
+pub const HDR_MAGIC = 0x00008000;
 pub inline fn _MAGIC(f: anytype, b: anytype) @TypeOf(f | ((((@as(c_int, 4) * b) + @as(c_int, 0)) * b) + @as(c_int, 7))) {
     return f | ((((@as(c_int, 4) * b) + @as(c_int, 0)) * b) + @as(c_int, 7));
 }
@@ -112,7 +112,7 @@ pub const T_MAGIC = _MAGIC(HDR_MAGIC, @as(c_int, 27));
 pub const R_MAGIC = _MAGIC(HDR_MAGIC, @as(c_int, 28));
 pub const MIN_MAGIC = @as(c_int, 8);
 pub const MAX_MAGIC = @as(c_int, 28);
-pub const DYN_MAGIC = promoteIntLiteral(c_int, 0x80000000, .hexadecimal);
+pub const DYN_MAGIC = 0x80000000;
 
 pub const sects_names = [5][]const u8{
     "text",
