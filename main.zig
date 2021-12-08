@@ -7,7 +7,7 @@ var hmap: std.AutoHashMap(u64, []const u8) = undefined;
 pub fn main() !void {
     var gpa = std.heap.GeneralPurposeAllocator(.{}){};
     defer _ = gpa.deinit();
-    const allocator = &gpa.allocator;
+    const allocator = gpa.allocator();
     const buf = try std.fs.cwd().readFileAlloc(allocator, std.mem.span(std.os.argv[1]), std.math.maxInt(usize));
     defer allocator.free(buf);
 
@@ -33,14 +33,9 @@ pub fn main() !void {
         f.sects[i] = .{ .name = name, .data = sl };
         off += size;
     }
-    // disassemble
+
+    // just print the machine code, so we can pipe it to a disassembler
     if (std.os.getenv("DISASM") != null) {
-        // var cp = try std.ChildProcess.init(&.{ "ndisasm", "-" }, allocator);
-        // defer cp.deinit();
-        // cp.stdin_behavior = .Pipe;
-        // try cp.spawn();
-        // try cp.stdin.?.writeAll(f.sects[0].data);
-        // _ = try cp.wait();
         try std.io.getStdOut().writeAll(f.sects[0].data);
         return;
     }
@@ -62,7 +57,7 @@ fn testHeaderSize(h: aout.Exec, b: []const u8) !void {
     const size_from_h = @sizeOf(aout.Exec) + h.text + h.data + h.syms + h.spsz + h.pcsz + ext_off;
     const size_from_b = b.len;
     if (size_from_h != size_from_b) {
-        std.log.emerg("===Header size doesn't match: size from header {d} != size from buf {d}===\n", .{
+        std.log.err("===Header size doesn't match: size from header {d} != size from buf {d}===\n", .{
             size_from_h,
             size_from_b,
         });
@@ -70,7 +65,7 @@ fn testHeaderSize(h: aout.Exec, b: []const u8) !void {
     }
 }
 
-pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym {
+pub fn readSyms(ally: std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym {
     var l = std.ArrayList(aout.Sym).init(ally);
     errdefer l.deinit();
     var stream = std.io.FixedBufferStream([]const u8){ .buffer = sym_sec, .pos = 0 };
@@ -102,13 +97,14 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
                 s.name = stream.buffer[st..e];
                 std.log.info("Z NAME: {any}", .{s.name});
             },
+            // c header file stuff, not needed for zig code
             .Z => {
                 const b = try r.readByte();
                 if (b != 0) return error.ZeroNoFollowZ;
                 while (true) {
                     if ((r.readIntBig(u16) catch break) == 0) break; // TODO actually handle it
                 }
-                s.name = "TODO: name for Z";
+                s.name = "name for Z";
             },
             else => {
                 s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
@@ -123,8 +119,8 @@ pub fn readSyms(ally: *std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym
     return l.toOwnedSlice();
 }
 
-/// return is filename:line
-fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8, linebuf: []const u8) !void {
+/// prints the line and file from a symbol
+fn getLineFromSym(a: std.mem.Allocator, syms: []const aout.Sym, sym: []const u8, linebuf: []const u8) !void {
     var prevzidxo: ?usize = null;
     const symidx = for (syms) |s, i| {
         if (s.type == .z and syms[i - 1].type != .z and syms[i - 1].type != .Z) {
@@ -136,7 +132,6 @@ fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8
     } else return error.SymNotFound;
     const prevzidx = prevzidxo orelse return error.NoFName;
     const z = syms[prevzidx];
-    std.log.info("z: {}", .{z});
     const name = try getNameFromz(a, z.name);
     defer a.free(name);
 
@@ -158,7 +153,6 @@ fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8
         else
             curpc += (u - 129) * pcquant;
         curpc += pcquant;
-        std.log.debug("after: {d}", .{lc});
     }
     std.log.info("file from {s}: `{s}:{d}`", .{
         sym,
@@ -168,7 +162,7 @@ fn getLineFromSym(a: *std.mem.Allocator, syms: []const aout.Sym, sym: []const u8
 }
 
 // returns allocated slice
-fn getNameFromz(a: *std.mem.Allocator, b: []const u8) ![]const u8 {
+fn getNameFromz(a: std.mem.Allocator, b: []const u8) ![]const u8 {
     var ar = std.ArrayList(u8).init(a);
     const r = std.io.fixedBufferStream(b).reader();
     var i: u16 = 0;
