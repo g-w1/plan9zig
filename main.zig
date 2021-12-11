@@ -142,16 +142,23 @@ fn getLineFromSym(a: std.mem.Allocator, syms: []const aout.Sym, sym: []const u8,
     var curpc: usize = 0x200028 - pcquant;
     const reader = std.io.fixedBufferStream(linebuf).reader();
     while (true) {
-        if (curpc >= symval) break;
+        // if (curpc >= symval) break;
         var u = reader.readByte() catch break;
-        if (u == 0)
-            lc += try reader.readIntBig(i32)
-        else if (u < 65)
-            lc += u
-        else if (u < 129)
-            lc -= (u - 64)
-        else
+        if (u == 0) {
+            const r = try reader.readIntBig(i32);
+            std.log.info("lc += i32 {x}", .{r});
+            lc += r;
+        } else if (u < 65) {
+            std.log.info("lc += small {x}", .{u});
+            lc += u;
+        } else if (u < 129) {
+            std.log.info("lc -= small {x}", .{u - 64});
+            lc -= (u - 64);
+        } else {
+            std.log.info("pc += small {x}", .{(u - 129) * pcquant});
             curpc += (u - 129) * pcquant;
+        }
+        std.log.info("pc += quanta {x}", .{pcquant});
         curpc += pcquant;
     }
     std.log.info("file from {s}: `{s}:{d}`", .{
