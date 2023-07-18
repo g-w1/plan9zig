@@ -27,7 +27,7 @@ pub fn main() !void {
     if (f.hdr.magic & aout.HDR_MAGIC != 0) // weird extension thing
         off += 8;
 
-    inline for (sects_names) |name, i| {
+    inline for (sects_names, 0..) |name, i| {
         const size = @field(f.hdr, name);
         var sl = buf[off .. off + size];
         f.sects[i] = .{ .name = name, .data = sl };
@@ -79,7 +79,7 @@ pub fn readSyms(ally: std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym 
 
         switch (s.type) {
             .f => {
-                s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
+                s.name = std.mem.span(@as([*:0]const u8, @ptrCast(stream.buffer[stream.pos..].ptr)));
                 stream.pos += s.name.len + 1;
                 try hmap.put(std.mem.readIntBig(u64, &s.value), s.name);
             },
@@ -107,7 +107,7 @@ pub fn readSyms(ally: std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym 
                 s.name = "name for Z";
             },
             else => {
-                s.name = std.mem.span(@ptrCast([*:0]const u8, stream.buffer[stream.pos..].ptr));
+                s.name = std.mem.span(@as([*:0]const u8, @ptrCast(stream.buffer[stream.pos..].ptr)));
                 stream.pos += s.name.len + 1;
             },
         }
@@ -122,7 +122,7 @@ pub fn readSyms(ally: std.mem.Allocator, sym_sec: []const u8) ![]const aout.Sym 
 /// prints the line and file from a symbol
 fn getLineFromSym(a: std.mem.Allocator, syms: []const aout.Sym, sym: []const u8, linebuf: []const u8) !void {
     var prevzidxo: ?usize = null;
-    const symidx = for (syms) |s, i| {
+    const symidx = for (syms, 0..) |s, i| {
         if (s.type == .z and syms[i - 1].type != .z and syms[i - 1].type != .Z) {
             prevzidxo = i;
         }
@@ -140,18 +140,26 @@ fn getLineFromSym(a: std.mem.Allocator, syms: []const aout.Sym, sym: []const u8,
     const pcquant = 1;
     var lc: i64 = 0;
     var curpc: usize = 0x200028 - pcquant;
-    const reader = std.io.fixedBufferStream(linebuf).reader();
+    var stream = std.io.fixedBufferStream(linebuf);
+    const reader = stream.reader();
     while (true) {
-        if (curpc >= symval) break;
+        // if (curpc >= symval) break;
         var u = reader.readByte() catch break;
-        if (u == 0)
-            lc += try reader.readIntBig(i32)
-        else if (u < 65)
-            lc += u
-        else if (u < 129)
-            lc -= (u - 64)
-        else
+        if (u == 0) {
+            const r = try reader.readIntBig(i32);
+            std.log.info("lc += i32 {x}", .{r});
+            lc += r;
+        } else if (u < 65) {
+            std.log.info("lc += small {x}", .{u});
+            lc += u;
+        } else if (u < 129) {
+            std.log.info("lc -= small {x}", .{u - 64});
+            lc -= (u - 64);
+        } else {
+            std.log.info("pc += small {x}", .{(u - 129) * pcquant});
             curpc += (u - 129) * pcquant;
+        }
+        std.log.info("pc += quanta {x}", .{pcquant});
         curpc += pcquant;
     }
     std.log.info("file from {s}: `{s}:{d}`", .{
@@ -164,7 +172,8 @@ fn getLineFromSym(a: std.mem.Allocator, syms: []const aout.Sym, sym: []const u8,
 // returns allocated slice
 fn getNameFromz(a: std.mem.Allocator, b: []const u8) ![]const u8 {
     var ar = std.ArrayList(u8).init(a);
-    const r = std.io.fixedBufferStream(b).reader();
+    var stream = std.io.fixedBufferStream(b);
+    const r = stream.reader();
     var i: u16 = 0;
     while (true) : (i += 1) {
         const v = r.readIntBig(u16) catch {
