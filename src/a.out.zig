@@ -64,7 +64,7 @@ pub const SymType = enum(u8) {
     m = 0x80 | 'm',
     _,
     pub fn fromU8(cr: u8) !@This() {
-        const c = @intToEnum(@This(), cr);
+        const c = @as(@This(), @enumFromInt(cr));
         return switch (c) {
             .T => c,
             .t => c,
